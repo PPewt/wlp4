@@ -1,0 +1,73 @@
+#!/bin/bash
+
+##############################################################
+#                                                            #
+# wlp4gen - A wlp4 compiler                                  #
+# Input: A .wlp4i file                                       #
+# Output: A linked and ready-to-run CS241-MIPS assembly file #
+#                                                            #
+# Copyright Sean Harrap (April 1, 2015)                      #
+#                                                            #
+##############################################################
+
+#TODO: Use mktemp instead of hardcoded tempfile names
+
+makeTree() {
+  read words < $1
+  echo $words > node
+  len=$(wc -l < $1)
+  len=$((len-1))
+  tail -n $len $1 > .tmp
+  mv .tmp $1
+  local count=-1
+  for word in $words; do
+    if [ $count -eq -1 ]; then
+      #For some reason case statement ranges aren't working
+      #on the linux.student.cs terminal, so this gross solution fixes it
+      grep -E "^[A-Z]+$" <<< $word &> /dev/null
+      if [ $? -eq 0 ]; then
+         return
+      else
+         count=0
+      fi
+    else
+      mkdir $count
+      cd $count
+      makeTree $1
+      cd ..
+      count=$((count+1))
+    fi
+  done
+}
+
+if [ $# -ne 1 ] || ! [ -f "$1" ]; then
+  echo "Usage: wlp4gen <input-file.wlp4i>" >&2
+  exit 1
+fi
+
+#make a parse tree
+if [ -e tree ]; then
+  rm -r tree
+fi
+mkdir tree
+a=$PWD/$1
+base=$(basename $1)
+path=${1%base}
+tmp=$(mktemp)
+cp $a "$tmp"
+cd tree
+makeTree $tmp
+cd ..
+rm "$tmp"
+#out="$path.${base%wlp4i}tmp}"
+out="${1%wlp4i}asm"
+
+./typecheck
+if [ $? -eq 0 ]; then
+  ./codegen "$out"
+fi
+
+rm -r tree
+#source /u/cs241/setup
+#java cs241.linkasm < "$out" > "$out.merl"
+#linker "$out.merl" "print.merl" "alloc.merl" > ${1%wlp4}asm
